@@ -48,6 +48,13 @@ PanelWindow {
     property string currentTab: "history"
     readonly property real tabRowHeight: clipboardWindow.s(28) + clipboardWindow.s(8)
 
+    Connections {
+        target: ClipboardController
+        function onRequestedTabChanged() {
+            if (clipboardWindow.isVisible) clipboardWindow.currentTab = ClipboardController.requestedTab === "emoji" ? "emoji" : "history";
+        }
+    }
+
     onCurrentTabChanged: {
         filterDebounceTimer.stop();
         if (currentTab === "emoji") {
@@ -576,7 +583,7 @@ PanelWindow {
         if (isVisible) {
             clipboardWindow.pasteTargetClass = (typeof CurrentFocus !== "undefined") ? CurrentFocus.appClass : "";
             clipboardWindow.pasteTargetAddress = (Compositor.name === "hyprland" && Hyprland.activeToplevel && Hyprland.activeToplevel.address) ? String(Hyprland.activeToplevel.address) : "";
-            clipboardWindow.currentTab = "history";
+            clipboardWindow.currentTab = ClipboardController.requestedTab === "emoji" ? "emoji" : "history";
             searchInput.clear();
             filterDebounceTimer.stop();
             emojiGrid.filter("");
@@ -811,7 +818,8 @@ PanelWindow {
                     ]
                     currentIndex: clipboardWindow.currentTab === "emoji" ? 1 : 0
                     onToggled: function(index) {
-                        clipboardWindow.currentTab = index === 1 ? "emoji" : "history";
+                        ClipboardController.requestedTab = index === 1 ? "emoji" : "history";
+                        clipboardWindow.currentTab = ClipboardController.requestedTab;
                         clipboardWindow.grabInputFocus();
                     }
                 }

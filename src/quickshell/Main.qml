@@ -128,13 +128,19 @@ PanelWindow {
             }
 
             if (cmd === "clipboard" || targetWidget === "clipboard" || cmd === "clip" || targetWidget === "clip") {
+                let clipTab = (arg === "emoji" || arg === "emojis" || targetWidget === "emoji" || targetWidget === "emojis") ? "emoji" : "history";
                 if (cmd === "close") {
                     ClipboardController.hide();
+                } else if (ClipboardController.isVisible && ClipboardController.requestedTab !== clipTab) {
+                    // Already open on the other tab: switch tabs instead of closing
+                    ClipboardController.requestedTab = clipTab;
                 } else if (cmd === "open") {
                     LauncherController.hide();
+                    ClipboardController.requestedTab = clipTab;
                     ClipboardController.show();
                 } else {
                     LauncherController.hide();
+                    ClipboardController.requestedTab = clipTab;
                     ClipboardController.toggle();
                 }
                 return;
