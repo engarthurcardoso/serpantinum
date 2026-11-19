@@ -1291,7 +1291,10 @@
     "clear": "Limpar",
     "empty": "Nada encontrado",
     "recent": "Recentes",
-    "pinned": "Fixados"
+    "pinned": "Fixados",
+    "tab_history": "Histórico",
+    "tab_emojis": "Emojis",
+    "search_emojis": "Buscar emojis"
   },
   "lock": {
     "status": {

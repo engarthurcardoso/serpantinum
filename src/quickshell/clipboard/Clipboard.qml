@@ -44,6 +44,25 @@ PanelWindow {
     // Window that was focused when the clipboard opened; paste-on-select sends the keys there
     property string pasteTargetClass: ""
     property string pasteTargetAddress: ""
+    // "history" or "emoji"
+    property string currentTab: "history"
+    readonly property real tabRowHeight: clipboardWindow.s(28) + clipboardWindow.s(8)
+
+    onCurrentTabChanged: {
+        filterDebounceTimer.stop();
+        if (currentTab === "emoji") {
+            emojiGrid.filter(searchInput.text);
+        } else {
+            executeClipFilter(searchInput.text);
+        }
+    }
+
+    function chooseEmoji(emoji) {
+        if (typeof Sounds !== "undefined") Sounds.playSfx("system/quick_click.wav");
+        let paste = pasteSnippet();
+        Quickshell.execDetached(["bash", "-c", "printf %s \"$1\" | wl-copy" + (paste ? " && " + paste : ""), "_", emoji]);
+        closeClipboard();
+    }
     property int configRevision: 0
     property bool isDirty: true
 
@@ -302,6 +321,10 @@ PanelWindow {
     }
 
     function filterClips(query) {
+        if (clipboardWindow.currentTab === "emoji") {
+            emojiGrid.filter(query);
+            return;
+        }
         clipboardWindow.pendingQuery = query;
         filterDebounceTimer.restart();
     }
@@ -553,8 +576,10 @@ PanelWindow {
         if (isVisible) {
             clipboardWindow.pasteTargetClass = (typeof CurrentFocus !== "undefined") ? CurrentFocus.appClass : "";
             clipboardWindow.pasteTargetAddress = (Compositor.name === "hyprland" && Hyprland.activeToplevel && Hyprland.activeToplevel.address) ? String(Hyprland.activeToplevel.address) : "";
+            clipboardWindow.currentTab = "history";
             searchInput.clear();
             filterDebounceTimer.stop();
+            emojiGrid.filter("");
             if (clipboardWindow.isDirty || clipboardWindow.allFetchedClips.length === 0) {
                 clipboardWindow.isDirty = false;
                 refreshClips();
@@ -669,7 +694,9 @@ PanelWindow {
                         fontPixelSize: clipboardWindow.s(12)
                         charSpacing: 1
 
-                        placeholderText: typeof I18n !== "undefined" ? I18n.t("clipboard.search", "Search clipboard") : "Search clipboard"
+                        placeholderText: clipboardWindow.currentTab === "emoji"
+                            ? (typeof I18n !== "undefined" ? I18n.t("clipboard.search_emojis", "Search emojis") : "Search emojis")
+                            : (typeof I18n !== "undefined" ? I18n.t("clipboard.search", "Search clipboard") : "Search clipboard")
                         showClearButton: true
 
                         onHasFocusChanged: {
@@ -684,6 +711,7 @@ PanelWindow {
                         onCleared: filterClips("")
 
                         Keys.onDownPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { emojiGrid.move("down"); event.accepted = true; return; }
                             clipboardWindow.isKeyboardNav = true;
                             keyboardNavTimer.restart();
                             if (clipList.currentIndex < clipBoxModel.count - 1) {
@@ -692,6 +720,7 @@ PanelWindow {
                             event.accepted = true;
                         }
                         Keys.onUpPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { emojiGrid.move("up"); event.accepted = true; return; }
                             clipboardWindow.isKeyboardNav = true;
                             keyboardNavTimer.restart();
                             if (clipList.currentIndex > 0) {
@@ -699,19 +728,31 @@ PanelWindow {
                             }
                             event.accepted = true;
                         }
+                        Keys.onLeftPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { emojiGrid.move("left"); event.accepted = true; return; }
+                            event.accepted = false;
+                        }
+                        Keys.onRightPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { emojiGrid.move("right"); event.accepted = true; return; }
+                            event.accepted = false;
+                        }
                         Keys.onTabPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { event.accepted = true; return; }
                             clipboardWindow.toggleExpandCurrent();
                             event.accepted = true;
                         }
                         Keys.onBacktabPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { event.accepted = true; return; }
                             clipboardWindow.toggleExpandCurrent();
                             event.accepted = true;
                         }
                         Keys.onReturnPressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { emojiGrid.activateCurrent(); event.accepted = true; return; }
                             activateIndex(clipList.currentIndex);
                             event.accepted = true;
                         }
                         Keys.onDeletePressed: function(event) {
+                            if (clipboardWindow.currentTab === "emoji") { event.accepted = true; return; }
                             if (clipList.currentIndex >= 0 && clipList.currentIndex < clipBoxModel.count) {
                                 let item = clipBoxModel.get(clipList.currentIndex);
                                 if (item) {
@@ -740,11 +781,38 @@ PanelWindow {
                         accentColor: ThemeBackend.surface0
                         bgOpacity: ThemeBackend.glassActive ? 0.0 : 1.0
                         textColor: ThemeBackend.text
-                        visible: true
+                        visible: clipboardWindow.currentTab === "history"
 
                         onTriggered: {
                             clipboardWindow.animateClear();
                         }
+                    }
+                }
+
+                Switch {
+                    id: tabSwitch
+                    z: 10
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    y: contentContainer.isSearchAtBottom
+                       ? (searchRow.y - height - clipboardWindow.s(8))
+                       : (searchRow.y + searchRow.height + clipboardWindow.s(8))
+                    height: clipboardWindow.s(28)
+                    cornerRadius: Math.min(ThemeBackend.borderRadius, clipboardWindow.s(10))
+                    fontPixelSize: clipboardWindow.s(11)
+                    baseColor: ThemeBackend.surface0
+                    bgOpacity: ThemeBackend.glassActive ? 0.0 : 1.0
+                    accentColor: ThemeBackend.mauve
+                    textColor: ThemeBackend.text
+                    activeTextColor: ThemeBackend.crust
+                    options: [
+                        typeof I18n !== "undefined" ? I18n.t("clipboard.tab_history", "History") : "History",
+                        typeof I18n !== "undefined" ? I18n.t("clipboard.tab_emojis", "Emojis") : "Emojis"
+                    ]
+                    currentIndex: clipboardWindow.currentTab === "emoji" ? 1 : 0
+                    onToggled: function(index) {
+                        clipboardWindow.currentTab = index === 1 ? "emoji" : "history";
+                        clipboardWindow.grabInputFocus();
                     }
                 }
 
@@ -753,9 +821,17 @@ PanelWindow {
                     z: 1
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    y: contentContainer.isSearchAtBottom ? 0 : (searchRow.height + clipboardWindow.s(10))
-                    height: Math.max(0, parent.height - searchRow.height - clipboardWindow.s(10))
+                    y: contentContainer.isSearchAtBottom ? 0 : (searchRow.height + clipboardWindow.s(10) + clipboardWindow.tabRowHeight)
+                    height: Math.max(0, parent.height - searchRow.height - clipboardWindow.s(10) - clipboardWindow.tabRowHeight)
                     clip: true
+
+                    ClipboardEmojiGrid {
+                        id: emojiGrid
+                        anchors.fill: parent
+                        visible: clipboardWindow.currentTab === "emoji"
+                        scaleFn: clipboardWindow.s
+                        onEmojiChosen: function(emoji) { clipboardWindow.chooseEmoji(emoji); }
+                    }
 
                     NumberAnimation {
                         id: scrollAnim
@@ -768,6 +844,7 @@ PanelWindow {
                     ListView {
                         id: clipList
                         anchors.fill: parent
+                        visible: clipboardWindow.currentTab === "history"
                         clip: true
                         model: clipBoxModel
                         spacing: clipboardWindow.s(4)
